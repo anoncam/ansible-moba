@@ -1,0 +1,83 @@
+---
+# Example fuse playbook with the ability to override variables
+# for this to work you will want to copy the representative
+# defaults/main.yml to your custom var files location.
+# This should allow for other setups and use cases
+
+- hosts: localhost
+  vars_files:
+#    - vars/aws-initial.yml
+    - roles/aws-initial/defaults/main.yml
+
+# Environment variables need to be set up in your local bash profile or system
+  environment:
+    AWS_ACCESS_KEY: "{{ lookup('env','AWS_ACCESS_KEY') }}"
+    AWS_SECRET_KEY: "{{ lookup('env','AWS_SECRET_KEY') }}"
+    AWS_REGION: "{{ aws_region }}"
+
+  roles:
+    - aws-initial
+
+
+- hosts: launched
+  become: true
+  vars_files:
+    - roles/configure-instances/defaults/main.yml
+
+  roles:
+    - configure-instances
+
+
+- name: "Set up Pre-reqs"
+  hosts: launched
+  become: true
+  vars_files:
+    - roles/prereqs/defaults/main.yml
+
+  roles:
+    - prereqs
+
+
+- name: "Install JBOSS"
+  hosts: launched
+  become: true
+
+- import_playbook: sites/install_jboss.yml
+
+
+- name: "Install Vertica Database"
+  hosts: vertica
+  become: true
+  vars_files:
+    - roles/vertica/defaults/main.yml
+
+  roles:
+    - vertica
+
+- name: "Configure Vertica Database"
+  hosts: vertica
+  become: true
+  vars_files:
+    - roles/vertica/defaults/main.yml
+
+- import_playbook: sites/create_db.yml
+
+
+- name: "Install OBA Server"
+  hosts: server
+  become: true
+  vars_files:
+    - roles/oba_server/defaults/main.yml
+
+  roles:
+    - oba_server
+
+
+- name: "Install OBA Collector"
+  hosts: collector
+  become: true
+  vars_files:
+    - roles/oba_collector/defaults/main.yml
+
+  roles:
+    - oba_collector

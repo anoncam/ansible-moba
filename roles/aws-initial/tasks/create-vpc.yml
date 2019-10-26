@@ -1,0 +1,83 @@
+---
+# use the Ansible module to create our VPC, saving the output into `create_vpc`
+- name: create VPC
+  ec2_vpc_net:
+    name: "{{ vpc_name }}"
+    cidr_block: "{{ vpc_cidr_block }}"
+    region: "{{ aws_region }}"
+    tags:
+      Project: ghost-train
+      CreatedBy: Ansible
+  register: create_vpc
+
+# parse the output of creating the VPC to extract the VPC ID -- we need to specify this in the subsequent tasks
+- name: "set fact: VPC ID"
+  set_fact:
+    vpc_id: "{{ create_vpc.vpc.id }}"
+
+# iterate over our dictionary of subnets with `with_dict`, and create each one with the Ansible module
+- name: create VPC subnets
+  ec2_vpc_subnet:
+    vpc_id: "{{ vpc_id }}"
+    cidr: "{{ item.value.cidr }}"
+    az: "{{ item.value.az }}"
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ item.key }}"
+      Project: ghost-train
+      CreatedBy: Ansible
+  with_dict: "{{ vpc_subnets }}"
+  register: create_vpc_subnets
+
+# this is a tricky one, using some filters to:
+# - loop over the list of outputs from creating our subnets
+# - for that subnet, define a "name: id" entry in the `vpc_subnet_ids` dictionary (or empty dictionary if it doesn't exist)
+- name: "set fact: VPC subnet IDs"
+  set_fact:
+    vpc_subnet_ids: "{{ vpc_subnet_ids | default({}) | combine({ item.subnet.tags.Name: item.subnet.id }) }}"
+  loop: "{{ create_vpc_subnets.results }}"
+
+# iterate over our list of security groups and create each one with the Ansible module
+- name: create VPC security groups
+  ec2_group:
+    name: "{{ item.name }}"
+    description: "{{ item.description }}"
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ aws_region }}"
+    rules: "{{ item.rules }}"
+    tags:
+      Project: ghost-train
+      CreatedBy: Ansible
+  loop: "{{ vpc_security_groups }}"
+
+- name: Create IGW
+  ec2_vpc_igw:
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vpc_name }}"
+      Project: ghost-train
+      CreatedBy: Ansible
+  register: igw
+
+- name: Set up route tables for private subnets
+  ec2_vpc_route_table:
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vpc_name }}"
+      Project: ghost-train
+    subnets:
+      - "{{ vpc_subnet_ids['moba-subnet'] }}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ igw.gateway_id }}"
+  register: aws_vpc_route_table
+
+# create an EC2 key
+- name: create EC2 key
+  ec2_key:
+    name: "{{ vpc_key }}"
+    region: "{{ aws_region }}"
+    key_material: "{{ vpc_key_material }}"
+    force: true

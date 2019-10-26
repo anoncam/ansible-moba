@@ -1,0 +1,159 @@
+---
+#ansible_ssh_private_key_file: 'id_rsa'
+aws_region: us-gov-west-1
+vpc_region: us-gov-west-1
+vpc_name: moba-vpc
+vpc_key: moba-key
+vpc_key_material: '- name: Wait for the instances ssh service
+  delegate_to: localhost
+  wait_for:
+    host: "{{ item.instances.0.public_ip_address }}"
+    port: 22
+    delay: 5
+    timeout: 320
+    state: started
+  with_items: "{{ instance_facts.results }}"
+  loop_control:
+    index_var: index'
+iam_role: "AnsibleRole"
+
+# Change CIDR Block
+# IP CIDR block for the VPC
+vpc_cidr_block: 10.2.13.0/28
+
+# a map defining the subnets we will build in the VPC
+vpc_subnets:
+  moba-subnet:
+    cidr: 10.2.13.0/28
+    az: "{{ aws_region }}a"
+
+# a list defining the security groups for our VPC
+vpc_security_groups:
+  - name: dev-moba-sg
+    description: "Micro Focus Bridge Analytics Security Group"
+    rules:
+      - proto: tcp
+        cidr_ip: 0.0.0.0/0
+        ports:
+          - 22
+          - 137
+          - 138
+          - 139
+          - 445
+          - 381
+          - 382
+          - 383
+          - 443
+          - 1443
+          - 1521
+          - 2181
+          - 2888
+          - 3888
+          - 4242
+          - 4447
+          - 4888
+          - 5433
+          - 6627
+          - 6700
+          - 6701
+          - 6702
+          - 6703
+          - 8080
+          - 8089
+          - 8443
+          - 9000
+          - 9092
+          - 9443
+          - 9990
+
+# This list should contain the unique values for the instance
+# "usage" parameter
+usage_list:
+  - moba
+
+# Create the data structure for the EC2 instances.
+moba_instances:
+# Example RedHat EC2
+#  awsmoba01:
+  aws-moba-01:
+    subnet: "{{ vpc_subnet_ids['moba-subnet'] }}"
+    secgroup: ['dev-moba-sg']
+    instancetype: m4.4xlarge
+    usage: moba
+    image: ami-a1d349c0
+    vol_device_name: /dev/sda1
+    vol_type: gp2
+    vol_size: 90
+    vol2_device_name: /dev/sda2
+    vol2_type: gp2
+    vol2_size: 90
+
+#  awsmoba02:
+  aws-moba-02:
+    subnet: "{{ vpc_subnet_ids['moba-subnet'] }}"
+    secgroup: ['dev-moba-sg']
+    instancetype: m4.4xlarge
+    usage: moba
+    image: ami-a1d349c0
+    vol_device_name: /dev/sda1
+    vol_type: gp2
+    vol_size: 90
+    vol2_device_name: /dev/sda2
+    vol2_type: gp2
+    vol2_size: 90
+
+#  awsmoba03:
+  aws-moba-03:
+    subnet: "{{ vpc_subnet_ids['moba-subnet'] }}"
+    secgroup: ['dev-moba-sg']
+    instancetype: m4.4xlarge
+    usage: moba
+    image: ami-a1d349c0
+    vol_device_name: /dev/sda1
+    vol_type: gp2
+    vol_size: 90
+    vol2_device_name: /dev/sda2
+    vol2_type: gp2
+    vol2_size: 90
+
+#  awsmoba04:
+  aws-moba-04:
+    subnet: "{{ vpc_subnet_ids['moba-subnet'] }}"
+    secgroup: ['dev-moba-sg']
+    instancetype: m4.4xlarge
+    usage: moba
+    image: ami-a1d349c0
+    vol_device_name: /dev/sda1
+    vol_type: gp2
+    vol_size: 90
+    vol2_device_name: /dev/sda2
+    vol2_type: gp2
+    vol2_size: 90
+
+#  awsmoba05:
+  aws-moba-05:
+    subnet: "{{ vpc_subnet_ids['moba-subnet'] }}"
+    secgroup: ['dev-moba-sg']
+    instancetype: m4.4xlarge
+    usage: moba
+    image: ami-a1d349c0
+    vol_device_name: /dev/sda1
+    vol_type: gp2
+    vol_size: 90
+    vol2_device_name: /dev/sda2
+    vol2_type: gp2
+    vol2_size: 90
+
+#  awsmoba06:
+  aws-moba-06:
+    subnet: "{{ vpc_subnet_ids['moba-subnet'] }}"
+    secgroup: ['dev-moba-sg']
+    instancetype: m4.4xlarge
+    usage: moba
+    image: ami-a1d349c0
+    vol_device_name: /dev/sda1
+    vol_type: gp2
+    vol_size: 90
+    vol2_device_name: /dev/sda2
+    vol2_type: gp2
+    vol2_size: 90

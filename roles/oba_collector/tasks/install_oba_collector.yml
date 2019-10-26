@@ -1,0 +1,80 @@
+---
+  - name: "{{ application_name }} | Ensure {{ application_group }} group exists"
+    group:
+      name: "{{ application_group }}"
+      state: present
+
+  - name: "{{ application_name }} | Ensure 'wheel' group exists"
+    group:
+      name: wheel
+      state: present
+
+  - name: "{{ application_name }} | Allow 'wheel' group to have passwordless sudo"
+    lineinfile:
+      dest: /etc/sudoers
+      state: present
+      regexp: '^%wheel'
+      line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+      validate: 'visudo -cf %s'
+
+  - name: "{{ application_name }} | Ensure {{ application_user }} user exists"
+    user:
+      name: "{{ application_user }}"
+      groups:
+        - "{{ application_group }}"
+        - "wheel"
+      shell: /bin/bash
+      append: yes
+      state: present
+
+  - name: "{{ application_name }} | Ensure main {{ application_name }} dirs exist"
+    file:
+      path: "{{ item }}"
+      owner: "{{ application_user }}"
+      group: "{{ application_group }}"
+      mode: 0755
+      state: directory
+    with_items:
+      - "{{ application_home_dir }}"
+
+
+  - name: "{{ application_name }} | Check if {{ application_name }} installed"
+    stat:
+      path: "{{ application_install_dir }}/{{ application_package }}"
+    register: application_installed_check
+
+  - name: "Download {{ application_name }} into {{ application_download_dir }}"
+    get_url:
+      url: "{{ remote_binary_url }}/{{ application_package }}"
+      dest: "{{ application_download_dir }}"
+      url_username: "{{ application_remote_username }}"
+      url_password: "{{ application_remote_password }}"
+    register: application_download
+    when: not application_installed_check.stat.exists
+
+  - name: "{{ application_name }} | Unarchive into {{ application_install_dir }}"
+    unarchive:
+      src: "{{ application_download_dir }}"
+      dest: "{{ application_install_dir }}"
+      owner: "{{ application_user }}"
+      group: "{{ application_group }}"
+      remote_src: yes
+    register: application_download
+    when: not application_installed_check.stat.exists
+
+  - name: Get silent file
+    copy:
+      src: roles/oba_collector/files/collector.txt
+      dest: /opt/oba/prompts/collector/
+      owner: root
+      group: root
+      mode: 0755
+    register: got_file
+    when: not application_installed_check.stat.exists
+
+  - name: Run the installer
+    shell: "/opt/oba/Analytics_Installation/opsa_03.04_setup.bin < /opt/oba/prompts/collector/collector.txt"
+    ignore_errors: true
+    args:
+      warn: false
+#    when: got_file.changed

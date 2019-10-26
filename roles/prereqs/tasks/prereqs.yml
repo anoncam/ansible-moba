@@ -1,0 +1,225 @@
+---
+  - name: Install Service Packages
+    yum:
+      name: "{{ service_packages }}"
+      state: latest
+    ignore_errors: true
+    register: packages_installed
+
+  - name: "curl pip"
+    become: true
+    become_user: root
+    shell: "curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py "
+    ignore_errors: true
+    register: pip_curled
+    args:
+      warn: false
+    when: packages_installed.changed
+
+  - name: "get pip"
+    become: true
+    become_user: root
+    shell: "python get-pip.py"
+    register: got_pip
+    ignore_errors: true
+    args:
+      warn: false
+    when: packages_installed.changed
+
+  - name: "get python"
+    shell: "cd /tmp && wget https://www.python.org/ftp/python/3.5.0/Python-3.5.0.tgz"
+    ignore_errors: true
+    register: got_python
+    when: packages_installed.changed
+
+  - name: "install python"
+    shell: "cd /tmp && tar -xvzf Python-3.5.0.tgz"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "configure python"
+    shell: "cd /tmp/Python-3.5.0 && ./configure"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "make python"
+    shell: "cd /tmp/Python-3.5.0 && make"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "make install"
+    shell: "cd /tmp/Python-3.5.0 && make altinstall"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "update path"
+    shell: "cd /tmp && export PATH=~/.local/bin:$PATH"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "update profile"
+    shell: "cd /tmp && source ~/.bash_profile"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "create key file"
+    become: true
+    become_user: root
+    shell: "cd /root/ && touch moba-key.pem"
+    ignore_errors: true
+    args:
+      warn: false
+    when: packages_installed.changed
+
+  - name: add keys
+    become: true
+    become_user: root
+    copy: 
+      src: keys/public/moba-key.pem
+      dest: /root/moba-key.pem
+      mode: 0600
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "check permissions"
+    become: true
+    become_user: root
+    shell: "cd /root/ && chown 600 moba-key.pem"
+    ignore_errors: true
+    args:
+      warn: false
+    when: packages_installed.changed
+
+  - name: "make directories"
+    become: true
+    become_user: root
+    shell: "mkdir -p {{ item }}"
+    ignore_errors: true
+    args:
+      warn: false
+    with_items: 
+      - /opt/HP/opsa/jboss
+      - /opt/HP/opsa/jdk
+      - /opt/HP/opsa/scripts
+      - /opt/HP/opsa/conf
+      - /opt/HP/opsa/data
+      - /opt/HP/opsa/log
+      - /opt/HP/opsa/lib
+      - /opt/HP/opsa/bin
+      - /opt/vertica
+      - /opt/OV
+      - /opt/oba
+      - /opt/oba/prompts/server/
+      - /opt/oba/prompts/collector/
+    when: packages_installed.changed
+
+  - name: "directory permissions"
+    become: true
+    become_user: root
+    shell: "chmod -R 755 /opt/"
+    ignore_errors: true
+
+  - name: "make swap space"
+    become: true
+    become_user: root
+    shell: "sudo dd if=/dev/zero of=/swapfile bs=1G count=4"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "swapfile permissions"
+    become: true
+    become_user: root
+    shell: "chmod 600 /swapfile"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "Make swapfile"
+    become: true
+    become_user: root
+    shell: "mkswap /swapfile"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "swap on"
+    become: true
+    become_user: root
+    shell: "swapon /swapfile"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "swapon"
+    become: true
+    become_user: root
+    shell: "swapon -s"
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "add to etc/fstab"
+    become: true
+    become_user: root
+    shell: 'echo -e "\n/swapfile swap swap defaults 0 0" >> /etc/fstab'
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "add to etc/bashrc 1 of 8"
+    become: true
+    become_user: root
+    shell: 'echo -e "\nexport CONFIG_LOCATION=/opt/vertica/opsa_data" >> /etc/bashrc'
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "add to etc/bashrc 2 of 8"
+    become: true
+    become_user: root
+    shell: 'echo -e "\nexport DATA_LOCATION=/opt/vertica/opsa_data" >> /etc/bashrc'
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "add to etc/bashrc 3 of 8"
+    become: true
+    become_user: root
+    shell: 'echo -e "\nexport DBADMIN_PWD=vertica" >> /etc/bashrc'
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "add to etc/bashrc 4 of 8"
+    become: true
+    become_user: root
+    shell: 'echo -e "\nexport instance_name=opsadb" >> /etc/bashrc'
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "add to etc/bashrc 5 of 8"
+    become: true
+    become_user: root
+    shell: 'echo -e "\nexport VERT_DBA_USR=dbadmin" >> /etc/bashrc'
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "add to etc/bashrc 6 of 8"
+    become: true
+    become_user: root
+    shell: 'echo -e "\nexport VERT_DBA_DATA_DIR=/opt/vertica/opsa_data" >> /etc/bashrc'
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "add to etc/bashrc 7 of 8"
+    become: true
+    become_user: root
+    shell: 'echo -e "\nexport VERT_DBA_HOME=/home/dbadmin" >> /etc/bashrc'
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "add to etc/bashrc 8 of 8"
+    become: true
+    become_user: root
+    shell: 'echo -e "\nexport VERT_DBA_GRP=verticadba" >> /etc/bashrc'
+    ignore_errors: true
+    when: packages_installed.changed
+
+  - name: "change swappiness"
+    become: true
+    become_user: root
+    shell: "echo -e '1' > /proc/sys/vm/swappiness"
+    ignore_errors: true
+    when: packages_installed.changed

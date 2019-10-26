@@ -1,0 +1,148 @@
+---
+  - name: "{{ application_name }} | Ensure {{ application_group }} group exists"
+    group:
+      name: "{{ application_group }}"
+      state: present
+
+  - name: "{{ application_name }} | Ensure 'wheel' group exists"
+    group:
+      name: wheel
+      state: present
+
+  - name: "{{ application_name }} | Allow 'wheel' group to have passwordless sudo"
+    lineinfile:
+      dest: /etc/sudoers
+      state: present
+      regexp: '^%wheel'
+      line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+      validate: 'visudo -cf %s'
+
+  - name: "{{ application_name }} | Ensure {{ application_user }} user exists"
+    user:
+      name: "{{ application_user }}"
+      groups: 
+        - "{{ application_group }}"
+        - "wheel"
+      shell: /bin/bash
+      append: yes
+      state: present
+
+  - name: "{{ application_name }} | Ensure main {{ application_name }} dirs exist"
+    file:
+      path: "{{ item }}"
+      owner: "{{ application_user }}"
+      group: "{{ application_group }}"
+      mode: 0755
+      state: directory
+    with_items:
+      - "{{ application_home_dir }}"
+
+  - name: "{{ application_name }} | Check if {{ application_name }} installed"
+    stat:
+      path: "{{ application_configuration_file }}"
+    register: application_installed_check
+
+  - name: "Download {{ application_name }} into {{ application_download_dir }}"
+    get_url:
+      url: "{{ remote_binary_url }}/{{ application_package }}"
+      dest: "{{ application_download_dir }}"
+      url_username: "{{ application_remote_username }}"
+      url_password: "{{ application_remote_password }}"
+    register: application_download
+    when: not application_installed_check.stat.exists
+
+  - name: "{{ application_name }} | Unarchive into {{ application_install_dir }}"
+    unarchive:
+      src: "{{ application_download_dir }}"
+      dest: "{{ application_install_dir }}"
+      owner: "{{ application_user }}"
+      group: "{{ application_group }}"
+      remote_src: yes
+    register: application_download
+    when: not application_installed_check.stat.exists
+
+
+  - name: unpack rpm
+    shell: "cd /opt/vertica/opsa_data/Vertica_Installation/ && rpm -i vertica-8*.rpm"
+    ignore_errors: true
+    args:
+      warn: false
+    register: rpm_unpacked
+    when: not application_installed_check.stat.exists
+
+
+  - name: get all hosts
+    set_fact:
+      hosts_all: "{% for host in groups['vertica'] %}
+{%- if loop.last -%}
+{{ hostvars[host]['ansible_default_ipv4']['address'] }}
+{%- else -%}
+{{ hostvars[host]['ansible_default_ipv4']['address'] }},
+{%- endif -%}{%- endfor -%}"
+
+  - name: get all hosts output
+    debug:
+      msg: "{{ hosts_all }}"
+
+  - name: get node hosts
+    set_fact:
+      node_hosts: "{% for host in groups['nodes'] %}
+{%- if loop.last -%}
+{{ hostvars[host]['ansible_default_ipv4']['address'] }}
+{%- else -%}
+{{ hostvars[host]['ansible_default_ipv4']['address'] }},
+{%- endif -%}{%- endfor -%}"
+
+  - name: get node hosts output
+    debug:
+      msg: "{{ node_hosts }}" 
+
+  - name: get individual host
+    set_fact:
+      host: "{{ ansible_default_ipv4.address }}"
+
+  - name: get individual host output
+    debug:
+      msg: "{{ host }}"
+
+  - name: check for config file
+    stat:
+      path: "{{ application_configuration_file }}"
+    register: config_file
+
+  - name: Permissions
+    become: true
+    become_user: root
+    shell: "chown -R dbadmin:verticadba /opt/vertica/ && chown root:verticadba /etc/security/limits.conf && chmod 664 /etc/security/limits.conf"
+    ignore_errors: true
+    args:
+      warn: false
+
+  - name: Run the installer
+    become: true
+    become_user: root
+    shell: "cd /opt/vertica/sbin/ && ./install_vertica --record-config {{application_configuration_file}} --hosts {{hosts_all}} --dba-user-password-disabled --point-to-point --data-dir /opt/vertica/opsa_data --ssh-identity {{pem_key}} -L CE --accept-eula --failure-threshold FAIL"
+    ignore_errors: true
+    args:
+      warn: false
+    when: not config_file.stat.exists
+
+  - name: logs
+    shell: "touch /tmp/logs && chmod 777 /tmp/logs"
+    ignore_errors: true
+    args:
+      warn: false
+
+  - name: logs
+    shell: "chmod 755 /opt/vertica/opsa_data/config.txt"
+    ignore_errors: true
+    args:
+      warn: false
+
+  - name: Install
+    become: true
+    become_user: ec2-user
+    shell: "sudo /opt/vertica/sbin/install_vertica --config-file {{application_configuration_file}}  --hosts {{host}} --dba-user-password-disabled --point-to-point --data-dir /opt/vertica/opsa_data --ssh-identity {{pem_key}} --failure-threshold FAIL > /tmp/logs 1>&2"
+    ignore_errors: true
+    args:
+      warn: false

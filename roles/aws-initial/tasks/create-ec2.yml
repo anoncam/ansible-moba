@@ -1,0 +1,259 @@
+---
+# Creates EC2 instances on a loop based on data defined in 'application_instances'
+# in the hosts_vars file aws-initial.yml
+#
+# Each item in the loop gets passed to this file as var name 'instance'.
+#
+# Updated to use the exact_count and count_tag. I specified two tags,
+# The first which will be used to identify hostname, the second which will
+# be used to identify the application the instance will be tied to.
+
+
+#
+# Backward compatible with hard-coded 'image' for ami id
+#
+- name: Epoch Tagging
+  set_fact:
+    epoch_time: "{{ ansible_date_time.epoch }}"
+    
+- name: "Debug instance info"
+  debug:
+    var: instance
+
+- set_fact:
+    instance_ami_id: "{{ instance.value.image }}"
+  when: instance.value.image is defined
+
+# Find the ami id by name for this region
+# ec2_ami_find is deprecated, so this is using ec2_ami_facts
+- block:
+  - name: "Find current, region-specific AMI"
+    ec2_ami_facts:
+      filters:
+        name: "{{ instance.value.ami_name }}"
+    register: found_amis
+    when: instance.value.ami_name is defined
+
+  - name: "Find most recent AMI from the list"
+    set_fact:
+      ami_details: >
+        {{ (found_amis.images | selectattr('name', 'defined') | sort(attribute='creation_date') | last ) }}
+
+  - set_fact:
+      instance_ami_id: "{{ ami_details.image_id }}"
+    when: ami_details is defined
+
+  when: instance.value.ami_name is defined
+
+- name: "Fail if AMI is not found"
+  fail:
+    msg: "Could not find AMI for : {{ instance.key }}"
+  when: instance_ami_id is not defined
+
+- name: Create Linux EC2 Instances
+  ec2:
+    key_name: "{{ vpc_key }}"
+    group: "{{ instance.value.secgroup }}"
+    instance_type: "{{ instance.value.instancetype }}"
+    image: "{{ instance_ami_id }}"
+    wait: yes
+    region: "{{ aws_region }}"
+    vpc_subnet_id: "{{ instance.value.subnet }}"
+    instance_profile_name: "{{ iam_role }}"
+    assign_public_ip: yes
+    instance_tags:
+      Name: "{{ instance.key }}-{{ epoch_time }}"
+      Usage: "{{ instance.value.usage }}"
+      CreatedBy: Ansible
+      Project: ghost-train
+    exact_count: 1
+    count_tag:
+      Name: "{{ instance.key }}-{{ epoch_time }}"
+    volumes:
+      - device_name: "{{ instance.value.vol_device_name }}"
+        volume_type: "{{ instance.value.vol_type }}"
+        volume_size: "{{ instance.value.vol_size }}"
+        delete_on_termination: true
+      - device_name: "{{ instance.value.vol2_device_name }}"
+        volume_type: "{{ instance.value.vol2_type }}"
+        volume_size: "{{ instance.value.vol2_size }}"
+        delete_on_termination: true
+        encrypted: true
+  register: ec2
+  when: (instance.value.ami_platform is not defined) or (instance.value.ami_platform  == 'linux')
+
+
+  # Update to assign EIP to all instances
+- name: Associate elastic IP instances
+  ec2_eip:
+    instance_id: "{{ item.instances.0.id }}"
+    region: "{{ aws_region }}"
+  loop: "{{ ec2.results }}"
+  register: eip
+  when: ec2 is not defined
+
+# Get all instance information, put in a loop to potentially use for other playbooks that deploy multiple instance for different purposes
+
+- name: "Gather Instance information"
+  ec2_instance_facts:
+    filters:
+      "tag:Name": "{{ instance.key }}-{{ epoch_time }}"
+      "instance-state-name": "running"
+  register: instance_facts
+
+- debug:
+    msg: "{{ instance_facts }}"
+
+- name: add first instance to designated groups
+  add_host:
+    hostname: "{{ instance_facts.instances[0].public_ip_address }}"
+    groupname: "{{ item }}"
+    sethostname: "{{ instance_facts.instances[0].tags.Name }}"
+    privateip: "{{ instance_facts.instances[0].private_ip_address }}"
+  with_items:
+    - "launched"
+    - "dbadmin"
+  when: instance_facts.instances[0].tags.Name == "aws-moba-01"
+#  when: instance_facts.instances[0].tags.Name == "awsmoba01"
+
+
+- name: add second instance to designated groups
+  add_host:
+    hostname: "{{ instance_facts.instances[0].public_ip_address }}"
+    groupname: "{{ item }}"
+    sethostname: "{{ instance_facts.instances[0].tags.Name }}"
+    privateip: "{{ instance_facts.instances[0].private_ip_address }}"
+    inventory_dir: inventory
+  with_items:
+    - "launched"
+    - "nodes"
+  when: instance_facts.instances[0].tags.Name == "aws-moba-02"
+#  when: instance_facts.instances[0].tags.Name == "awsmoba02"
+
+- name: add third instance to designated groups
+  add_host:
+    hostname: "{{ instance_facts.instances[0].public_ip_address }}"
+    groupname: "{{ item }}"
+    sethostname: "{{ instance_facts.instances[0].tags.Name }}"
+    privateip: "{{ instance_facts.instances[0].private_ip_address }}"
+    inventory_dir: inventory
+  with_items:
+    - "launched"
+    - "nodes"
+  when: instance_facts.instances[0].tags.Name == "aws-moba-03"
+#  when: instance_facts.instances[0].tags.Name == "awsmoba03"
+
+- name: add fourth instance to designated groups
+  add_host:
+    hostname: "{{ instance_facts.instances[0].public_ip_address }}"
+    groupname: "{{ item }}"
+    sethostname: "{{ instance_facts.instances[0].tags.Name }}"
+    privateip: "{{ instance_facts.instances[0].private_ip_address }}"
+    inventory_dir: inventory
+  with_items:
+    - "launched"
+    - "nodes" 
+  when: instance_facts.instances[0].tags.Name == "aws-moba-04"
+#  when: instance_facts.instances[0].tags.Name == "awsmoba04"
+
+
+- name: add fifth instance to designated groups
+  add_host:
+    hostname: "{{ instance_facts.instances[0].public_ip_address }}"
+    groupname: "{{ item }}"
+    sethostname: "{{ instance_facts.instances[0].tags.Name }}"
+    privateip: "{{ instance_facts.instances[0].private_ip_address }}"
+    inventory_dir: inventory
+  with_items:
+    - "launched"
+    - "server"
+  when: instance_facts.instances[0].tags.Name == "aws-moba-05"
+#  when: instance_facts.instances[0].tags.Name == "awsmoba05"
+
+
+- name: add sixth instance to designated groups
+  add_host:
+    hostname: "{{ instance_facts.instances[0].public_ip_address }}"
+    groupname: "{{ item }}"
+    sethostname: "{{ instance_facts.instances[0].tags.Name }}"
+    privateip: "{{ instance_facts.instances[0].private_ip_address }}"
+    inventory_dir: inventory
+  with_items:
+    - "launched"
+    - "collector"
+  when: instance_facts.instances[0].tags.Name == "aws-moba-06"
+#  when: instance_facts.instances[0].tags.Name == "awsmoba06"
+
+
+## Pull instances public ip's into designated groups
+#- name: instance one
+#  add_host:
+#    name: node1
+#    ansible_host: "{{ instance_facts.instances[0].public_ip_address }}"
+#    ansible_user: ec2-user
+#    ansible_become: true
+#    groups: 
+#    - launched
+#    - dbadmin
+#  when: instance_facts.instances[0].tags.Name == "aws-moba-01"
+#  when: instance_facts.instances[0].tags.Name == "awsmoba01"
+
+#- name: instance two
+#  add_host:
+#    name: node2
+#    ansible_host: "{{ instance_facts.instances[0].public_ip_address }}"
+#    ansible_user: ec2-user
+#    ansible_become: true
+#    groups: 
+#    - nodes
+#    - launched
+#  when: instance_facts.instances[0].tags.Name == "aws-moba-02"
+#  when: instance_facts.instances[0].tags.Name == "awsmoba02"
+
+#- name: instance three
+#  add_host:
+#    name: node3
+#    ansible_host: "{{ instance_facts.instances[0].public_ip_address }}"
+#    ansible_user: ec2-user
+#    ansible_become: true
+#    groups:
+#    - nodes
+#    - launched
+#  when: instance_facts.instances[0].tags.Name == "aws-moba-03"
+#  when: instance_facts.instances[0].tags.Name == "awsmoba03"
+
+#- name: instance four
+#  add_host:
+#    name: node4
+#    ansible_host: "{{ instance_facts.instances[0].public_ip_address }}"
+#    ansible_user: ec2-user
+#    ansible_become: true
+#    groups:
+#    - nodes
+#    - launched
+#  when: instance_facts.instances[0].tags.Name == "aws-moba-04"
+#  when: instance_facts.instances[0].tags.Name == "awsmoba04"
+
+- name: Add all instances to launched group
+  add_host:
+    hostname: "{{ this.public_ip_address }}"
+    groupname: launched
+    sethostname: "{{ this.tags.Name }}"
+    privateip: "{{ this.private_ip_address }}"
+#    inventory_dir: inventory
+  with_items: "{{ instance_facts.instances }}"
+  loop_control:
+    loop_var: this
+
+- name: Wait for the instances ssh service
+  delegate_to: localhost
+  wait_for:
+    host: "{{ machines.public_ip_address }}"
+    port: 22
+    delay: 5
+    timeout: 500
+    state: started
+  with_items: "{{ instance_facts.instances }}"
+  loop_control:
+    loop_var: machines
+  when: (instance.value.ami_platform is not defined) or (instance.value.ami_platform  == 'linux')

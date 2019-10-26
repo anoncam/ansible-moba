@@ -1,0 +1,179 @@
+---
+- name: Install WildFly (JBOSS)
+  hosts: launched
+  become: true
+  become_user: root
+  tasks: 
+
+  - name: Install Service Packages
+    yum:
+      name: "lsof"
+      state: latest
+    ignore_errors: true
+    register: lsof_installed
+
+
+  - name: ensure wildfly group exists
+    group:
+      name: "wildfly"
+      state: present
+    when: lsof_installed.changed
+
+  - name: ensure wildfly user exists
+    user:
+      name: "wildfly"
+      groups: "wildfly"
+      shell: /bin/bash
+      append: yes
+      state: present
+    when: lsof_installed.changed
+
+  - name: ensure wildfly home dir exists
+    file:
+      path: "{{ item }}"
+      owner: "wildfly"
+      group: "wildfly"
+      mode: 0755
+      state: directory
+    with_items:
+      - "/opt/wildfly"
+    when: lsof_installed.changed
+      
+  - name: get wildfly
+    shell: "cd /opt/wildfly && wget http://download.jboss.org/wildfly/17.0.1.Final/wildfly-17.0.1.Final.tar.gz"
+    register: application_download
+    ignore_errors: true
+    when: lsof_installed.changed
+
+  - name: install wildfly
+    shell: "cd /opt/wildfly && tar -xvzf wildfly-17.0.1.Final.tar.gz --strip-components=1"
+    ignore_errors: true
+    register: application_installed
+    when: lsof_installed.changed
+
+  - name: remove tarball from dir
+    shell: "cd /opt/wildfly && rm -rf *.tar.*"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed
+
+  - name: create symbolic link that points to wildfly installation directory
+    shell: "ln -s /opt/wildfly-17.0.1 /opt/wildfly"
+    ignore_errors: yes
+    args:
+      warn: false
+    when: lsof_installed.changed
+
+  - name: check ownership for /etc/wildfly directory
+    file:
+      path: /etc/wildfly
+      state: directory
+      owner: "wildfly"
+      group: "wildfly"
+    when: lsof_installed.changed
+      
+  - name: copy conf file
+    shell: "cp /opt/wildfly/docs/contrib/scripts/systemd/wildfly.conf /etc/wildfly/"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed
+      
+  - name: copy the wildfly launch.sh script
+    shell: "cp /opt/wildfly/docs/contrib/scripts/systemd/launch.sh /opt/wildfly/bin/"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed
+
+  - name: update permissions
+    shell: "chmod +x /opt/wildfly/bin/*.sh"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed      
+     
+  - name: copy the systemd unit file
+    shell: "cp /opt/wildfly/docs/contrib/scripts/systemd/wildfly.service /etc/systemd/system/"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed
+    
+  - name: update permissions
+    shell: "chown -R wildfly:wildfly /opt/wildfly"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed    
+
+  - name: reload
+    shell: "systemctl daemon-reload"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed
+      
+  - name: start
+    shell: "systemctl start wildfly"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed
+          
+  - name: enable
+    shell: "systemctl enable wildfly"
+    ignore_errors: true
+    args:
+      warn: false
+    register: wildfly_enabled
+    when: lsof_installed.changed
+     
+  - name: Ensure firewalld is running and enabled on boot
+    service: name=firewalld state=started enabled=yes
+    when: lsof_installed.changed
+
+  - name: adjust the Firewall 1 of 3
+    shell: "firewall-cmd --zone=public --permanent --add-port={8080,9990}/tcp"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed
+
+  - name: adjust the Firewall 2 of 3
+    shell: 'semanage fcontext  -a -t bin_t  "/opt/wildfly/bin(/.*)?"'
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed
+      
+  - name: adjust the Firewall 3 of 3
+    shell: "restorecon -Rv /opt/wildfly/bin/"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed
+
+  - name: reload the Firewall
+    shell: "firewall-cmd --reload"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed
+          
+  - name: Ensure firewalld is stopped and disabled on boot
+    service: name=firewalld state=stopped enabled=no
+
+  - name: disable selinux
+    shell: "setenforce 0"
+    ignore_errors: true
+    args:
+      warn: false
+
+  - name: add admin user
+    shell: "/opt/wildfly/bin/add-user.sh -r ManagementRealm -u admin -p wildfly"
+    ignore_errors: true
+    args:
+      warn: false
+    when: lsof_installed.changed

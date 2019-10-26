@@ -1,0 +1,95 @@
+---
+- name: Create Vertica DataBase
+  hosts: dbadmin
+
+  vars: 
+    - pem_key: "/root/moba-key.pem"
+
+  tasks:
+
+  - name: Add nodes to cluster
+    become: true
+    become_user: ec2-user
+    shell: "sudo /opt/vertica/sbin/update_vertica --add-hosts {{node_hosts}} --dba-user-password-disabled --point-to-point --data-dir /opt/vertica/opsa_data --ssh-identity {{pem_key}} --failure-threshold FAIL"
+    ignore_errors: true
+    args:
+      warn: false
+
+
+  - name: Create DB
+    become: true
+    become_user: dbadmin
+    shell: 'yes ""|/opt/vertica/bin/admintools -t create_db -d opsadb -p dbadmin --hosts {{node_hosts}} --policy=always --skip-fs-checks'
+    ignore_errors: true
+    args:
+      warn: false
+
+
+- name: Reboot
+  hosts: vertica
+  become: true
+  become_user: root
+  tasks:
+
+  - name: check for Keepalive file
+    stat:
+      path: "/proc/sys/net/ipv4/tcp_keepalive_time"
+    register: keepalive_file
+
+  - name: Backup sysctl.conf
+    shell: "cp -p /etc/sysctl.conf /etc/sysctl.conf.bak"
+    register: backup_1
+    ignore_errors: true
+
+  - name: Keepalive Time
+    shell: 'echo -e "600" >> /proc/sys/net/ipv4/tcp_keepalive_time'
+    ignore_errors: true
+    when: backup_1.changed
+
+  - name: Add lines to sysctl.conf
+    shell: "{{item}}"
+    with_items: 
+      - 'echo -e "\nnet.ipv4.tcp_keepalive_time = 600" >> /etc/sysctl.conf'
+      - 'echo -e "\nnet.ipv4.tcp_keepalive_intvl = 60" >> /etc/sysctl.conf'
+      - 'echo -e "\nnet.ipv4.tcp_keepalive_probes=20" >> /etc/sysctl.conf'
+    ignore_errors: true
+    when: backup_1.changed
+
+  - name: update sysctl
+    shell: "sysctl -p"
+    ignore_errors: true
+    when: backup_1.changed or backup_2.changed
+
+
+  - name: Reboot
+    shell: "sleep 5 && reboot"
+    async: 1
+    poll: 0
+
+  - name: Wait for the reboot to complete
+    wait_for_connection:
+      connect_timeout: 20
+      sleep: 5
+      delay: 5
+      timeout: 300
+
+- name: Add nodes to DB
+  hosts: dbadmin
+  tasks:
+
+  - name: Add nodes to DB
+    become: true
+    become_user: dbadmin
+    shell: 'yes ""| /opt/vertica/bin/admintools -t db_add_node -d opsadb -p dbadmin -s {{node_hosts}} --skip-fs-checks'
+    ignore_errors: true
+    args:
+      warn: false
+
+- name: Start Vertica DataBase
+  hosts: vertica
+  become: true
+  become_user: root
+  tasks:
+
+  - name: Start the database
+    service: name=verticad state=started

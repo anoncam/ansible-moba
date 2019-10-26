@@ -1,0 +1,9 @@
+---
+ - include_tasks: create-vpc.yml
+
+# build each ec2 instance
+
+ - include_tasks: create-ec2.yml
+   with_dict: "{{ moba_instances }}"
+   loop_control:
+     loop_var: instance

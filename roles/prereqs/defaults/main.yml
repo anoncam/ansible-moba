@@ -1,0 +1,14 @@
+---
+project_name: ghost-train
+aws_region: us-gov-west-1
+vpc_name: moba-vpc
+vpc_key: moba-key
+
+
+service_packages:
+  - gcc
+  - python-devel
+  - yum-utils
+  - openssl-devel
+  - bzip2-devel
+  - sqlite-devel

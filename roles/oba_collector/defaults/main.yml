@@ -1,0 +1,27 @@
+---
+application_group: verticadba
+application_user: dbadmin
+application_user_password: vertica
+application_name: oba_collector
+application_hosts: "{{ groups['collector'] }}"
+
+remote_binary_url: "https://nexus.apps.ngendevops.com/repository/ghosttrain-app-zips/OBA"
+application_package_name: OBA_Application_Server
+application_package: "{{ application_package_name }}.zip"
+application_remote_username: "svcnexus"
+application_remote_password: "aA0GBFfuAxnNoUSkUI"
+#application_remote_password: "{{ lookup('env', 'NEXUS_SERVICE_ACCOUNT_PASSWORD') }}"
+application_download_dir: /tmp/{{ application_name }}
+application_install_dir: /opt/oba/
+application_home_dir: /opt/oba/
+application_license_file: "{{ application_home_dir }}/license.txt"
+pem_key: /root/moba-key.pem
+#pem_key: "{{ lookup('file', 'keys/public/moba-key.pem') }}"
+
+project_name: ghost-train
+#ansible_user: ec2-user
+#ansible_ssh_private_key_file: 'id_rsa'
+#ansible_ssh_private_key_file: '/tmp/ssh/id_rsa'
+aws_region: us-gov-west-1
+vpc_name: moba-vpc
+vpc_key: moba-key
